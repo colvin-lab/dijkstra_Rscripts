@@ -1,7 +1,6 @@
-############################### User Functions ###############################
+###################### Project-specific Functions ############################
 
-
-# For convenience.
+######## User functions ########
 mk_datsummary = function(lsfnms = mk_lsfnms(), 
                          pngfnm = "datsummary.png", pngtitle = "", 
                          diagColor = NA, datUnits = "", bQuantile = TRUE,
@@ -33,18 +32,150 @@ mk_datoutlier = function(lsfnms = mk_lsfnms(), fromRes = NA, toRes = NA, bGrid =
 }
 
 
-mk_difsummary = function(lsfnms = mk_lsfnms(), fromRes = NA, toRes = NA, bGrid = FALSE, 
+mk_diffsummary = function(lsfnms = mk_lsfnms(), fromRes = NA, toRes = NA, 
                          pngfnm = "diffsummary.png", pngtitle = "", 
                          diagColor = 0.5, datUnits = "", bQuantile = TRUE, 
-                         zrange = 3.0, cutoff = 0.5)
+                         zrange = 3.0, cutoff = 0.5, bGrid = FALSE)
 {
-  fnms2difsum(lsfnms, pngfnm = pngfnm, pngtitle = pngtitle, 
+  fnms2diffsummary(lsfnms, pngfnm = pngfnm, pngtitle = pngtitle, 
              rcnames = c("M1", "M2toM1", "M2FBP", "M2", "M2H"),  
              bQuantile = bQuantile, diagColor = diagColor, bColorBar = TRUE, 
              datUnits = datUnits, fromRes = fromRes, toRes = toRes, bGrid = bGrid,
              zmean = 0.0, zrange = zrange, cutoff = cutoff, ospace = 6)
 }
 
+
+mk_diffsummary2 = function(rlsfnms = mk_lsfnms(includeFiles = c(1, 3, 4),
+                                              addPattern = "rdat"), 
+                           dlsfnms = mk_lsfnms(includeFiles = c(1, 3, 4),
+                                              addPattern = "ddat"), 
+                           bPNG = TRUE, 
+                           pngfnm = "diffsummary.png", pngtitle = "", 
+                           rcnames = NA, bColorBar = TRUE, 
+                           fromRes = NA, toRes = NA, bGrid = FALSE, 
+                           pngWidth = NA, pngHeight = NA, ospace = 6, 
+                           bQuantile = TRUE, bDiagNA = TRUE, diagColor = 0.5, 
+                           fWidth = 500, fHeight = 500, zmean = 0.0, zrange = 3.0, 
+                           cutoff = 0.5, datUnits = "")
+{
+  lsdats = list()
+  for (i in 1:length(rlsfnms))
+  {
+    rdat = avg2png(rlsfnms[[i]], datUnits = datUnits, bQuantile = FALSE, 
+                   bDiagNA = bDiagNA, diagColor = diagColor, 
+                   zmean = 0.0, zrange = zrange, cutoff = cutoff)
+    rdat = r2sigma(rdat)
+    ddat = avg2png(dlsfnms[[i]], datUnits = datUnits, bQuantile = FALSE, 
+                   bDiagNA = bDiagNA, diagColor = diagColor, 
+                   zmean = 0.0, zrange = zrange, cutoff = cutoff)
+    #return(ddat)
+    ddat = invert_ddat_v4(ddat)
+    idat = rdat * ddat
+    lsdats[[i]] = idat
+  }
+  
+  diffsummary(lsdats, bPNG = bPNG, pngfnm = pngfnm, pngtitle = pngtitle, 
+              rcnames = rcnames, bColorBar = bColorBar, datUnits = datUnits, 
+              pngWidth = pngWidth, pngHeight = pngHeight, 
+              fromRes = fromRes, toRes = toRes, bGrid = bGrid, 
+              ospace = ospace, bQuantile = bQuantile, bDiagNA = bDiagNA, 
+              diagColor = diagColor, fWidth = fWidth, fHeight = fHeight, 
+              zmean = zmean, zrange = zrange, cutoff = cutoff)
+  
+  #return(lsdats)
+}
+
+
+######### Sub-functions ########
+
+# Make the list of file names. To use a subset, set includeFiles equal
+# to an array with only the numbers corresponding to the wanted files.
+# The array must be sorted, or it will leave out files.
+mk_lsfnms = function(includeFiles = c(1, 2, 3, 4, 5), addPattern = "")
+{
+  lsfnms = list()
+  if (any(includeFiles == 1))
+  {
+    lsfnms[[which(includeFiles == 1)]] = dir(pattern = paste("^M1\\.", ".*", addPattern, sep = ""))
+  }
+  if (any(includeFiles == 2))
+  {
+    lsfnms[[which(includeFiles == 2)]] = dir(pattern = paste("^M2toM1\\.", ".*", addPattern, sep = ""))
+  }
+  if (any(includeFiles == 3))
+  {
+    lsfnms[[which(includeFiles == 3)]] = dir(pattern = paste("^M2FBP\\.", ".*", addPattern, sep = ""))
+  }
+  if (any(includeFiles == 4))
+  {
+    lsfnms[[which(includeFiles == 4)]] = dir(pattern = paste("^M2\\.", ".*", addPattern, sep = ""))
+  }
+  if (any(includeFiles == 5))
+  {
+    lsfnms[[which(includeFiles == 5)]] = dir(pattern = paste("^M2H\\.", ".*", addPattern, sep = ""))
+  }
+  return(lsfnms)
+}
+
+
+invert_ddat_v1 = function(dat)
+{
+  # Invert by quantilization.
+  f   = ecdf(dat)
+  dat = 1.0 - f(dat)
+  
+  return(dat)
+}
+
+
+invert_ddat_v2 = function(dat)
+{
+  # Invert by exponential.
+  x   = mean(dat, na.rm = TRUE)
+  dat = 2 ^ -(dat / x)
+  
+  return(dat)
+}
+
+
+invert_ddat_v3 = function(dat)
+{
+  # Invert by division.
+  x   = mean(dat, na.rm = TRUE)
+  dat = x / dat
+  
+  # Outliers.
+  dat[dat > 100.0] = 100.0
+  
+  return(dat)
+}
+
+
+invert_ddat_v4 = function(dat)
+{
+  # Invert by division.
+  x   = mean(dat, na.rm = TRUE)
+  dat = x / dat
+  
+  # Outliers.
+  dat[dat > 100.0] = 100.0
+  
+  # Normalize using sigma equation.
+  dat = r2sigma(dat)
+  
+  return(dat)
+}
+
+
+r2sigma = function(r, rsigma = 1.0)
+{
+  s = 2.0 / (1.0 + exp(-r / rsigma)) - 1.0
+  
+  return(s)
+}
+
+
+############################### User Functions ###############################
 
 # lsdats:    List of dat matrices. Each item has a corresponding row and col.
 #            Function calculates all possible paired differences.
@@ -123,13 +254,13 @@ diffsummary = function(lsdats, bPNG = TRUE, pngfnm = "diffsummary.png",
 # Tries to run diffsummary on a list of file names. The input should be a 
 # list where each element is a vector of file names where the average 
 # corresponds to one row and column.
-fnms2difsum= function(lsfnms, bPNG = TRUE, pngfnm = "diffsummary.png", 
-                      pngtitle = "", rcnames = NA, bColorBar = FALSE, 
-                      fromRes = NA, toRes = NA, bGrid = FALSE, 
-                      pngWidth = NA, pngHeight = NA, ospace = 0, 
-                      bQuantile = TRUE, bDiagNA = TRUE, diagColor = 0.5, 
-                      fWidth = 500, fHeight = 500, zmean = 0.0, zrange = 0.0, 
-                      cutoff = 0.0, datUnits = "")
+fnms2diffsummary = function(lsfnms, bPNG = TRUE, pngfnm = "diffsummary.png", 
+                            pngtitle = "", rcnames = NA, bColorBar = FALSE, 
+                            fromRes = NA, toRes = NA, bGrid = FALSE, 
+                            pngWidth = NA, pngHeight = NA, ospace = 0, 
+                            bQuantile = TRUE, bDiagNA = TRUE, diagColor = 0.5, 
+                            fWidth = 500, fHeight = 500, zmean = 0.0, 
+                            zrange = 0.0, cutoff = 0.0, datUnits = "")
 {
   lsdats = list()
   for (i in 1:length(lsfnms))
@@ -311,19 +442,6 @@ datsummary = function(lsfnms, nrows, ncols, pngfnm = "datsummary.png",
 }
 
 
-# Make the list of file names.
-mk_lsfnms = function()
-{
-  lsfnms = list()
-  lsfnms[[1]] = dir(pattern = "^M1.repl_..chain")
-  lsfnms[[2]] = dir(pattern = "^M2toM1.repl_..chain")
-  lsfnms[[3]] = dir(pattern = "^M2FBP.repl_..chain")
-  lsfnms[[4]] = dir(pattern = "^M2.repl_..chain")
-  lsfnms[[5]] = dir(pattern = "^M2H.repl_..chain")
-  return(lsfnms)
-}
-
-
 # Returns outliers.
 datoutlier = function(lsfnms, nrows, ncols, pngfnm = "datoutlier.png", 
                       pngtitle = "", rnames = NA, cnames = NA, 
@@ -360,7 +478,6 @@ datoutlier = function(lsfnms, nrows, ncols, pngfnm = "datoutlier.png",
         # Convert to quantiles.
         if (bQuantile)
         {
-          # f converts to percentile then qnorm converts to z-score.
           f    = ecdf(jdat)
           jdat = qnorm(f(jdat))
           dim(jdat) = c(msize, msize)
@@ -504,7 +621,7 @@ datoutlier = function(lsfnms, nrows, ncols, pngfnm = "datoutlier.png",
 
 # fnmlist: Vector of file names as returned by the dir() function.
 avg2png = function(fnmlist, bPNG = FALSE, pngfnm = "avgcor.png", 
-                   pngWidth = 1400, pngHeight = 1000, bPlot = TRUE, 
+                   pngWidth = 1400, pngHeight = 1000, bPlot = FALSE, 
                    fromRes = NA, toRes = NA, bGrid = FALSE, 
                    bColorBar = FALSE, bHist = FALSE, bQHist = FALSE, 
                    bDiagNA = TRUE, diagColor = NA, bQuantile = TRUE, 
@@ -678,14 +795,17 @@ dat2png = function(dat, bPNG = FALSE, pngfnm = "correl.png", pngtitle = "",
   # Convert to quantiles.
   if (bQuantile)
   {
-    # f converts to percentile then qnorm converts to z-score.
-    f   = ecdf(dat)
-    dat = qnorm(f(dat))
-    dim(dat) = c(msize, msize)
-    
-    # Outliers.
-    dat[dat >  5.0] =  5.0
-    dat[dat < -5.0] = -5.0
+    if (sum(abs(dat), na.rm = TRUE) > 0.0)
+    {
+      # f converts to percentile then qnorm converts to z-score.
+      f   = ecdf(dat)
+      dat = qnorm(f(dat))
+      dim(dat) = c(msize, msize)
+      
+      # Outliers.
+      dat[dat >  5.0] =  5.0
+      dat[dat < -5.0] = -5.0
+    }
     
     if (bQHist)
     {

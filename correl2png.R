@@ -49,14 +49,15 @@ mk_diffsummary2 = function(rlsfnms = mk_lsfnms(includeFiles = c(1, 3, 4),
                                               addPattern = "rdat"), 
                            dlsfnms = mk_lsfnms(includeFiles = c(1, 3, 4),
                                               addPattern = "ddat"), 
-                           bPNG = TRUE, 
+                           bPNG = TRUE, avgDiffPNG = "",
                            pngfnm = "diffsummary.png", pngtitle = "", 
-                           rcnames = NA, bColorBar = TRUE, 
-                           fromRes = NA, toRes = NA, bGrid = FALSE, 
-                           pngWidth = NA, pngHeight = NA, ospace = 6, 
-                           bQuantile = TRUE, bDiagNA = TRUE, diagColor = 0.5, 
-                           fWidth = 500, fHeight = 500, zmean = 0.0, zrange = 3.0, 
-                           cutoff = 0.5, datUnits = "")
+                           bColorBar = TRUE, bGrid = FALSE, 
+                           fromRes = NA, toRes = NA, ospace = 6, 
+                           pngWidth = NA, pngHeight = NA, fWidth = 500, 
+                           fHeight = 500, bDiagNA = TRUE, diagColor = 0.5, 
+                           bQuantile = TRUE, zmean = 0.0, zrange = 3.0, 
+                           cutoff = 0.5, datUnits = "",
+                           rcnames = c("M1", "M2FBP", "M2"))
 {
   lsdats = list()
   for (i in 1:length(rlsfnms))
@@ -74,15 +75,28 @@ mk_diffsummary2 = function(rlsfnms = mk_lsfnms(includeFiles = c(1, 3, 4),
     lsdats[[i]] = idat
   }
   
-  diffsummary(lsdats, bPNG = bPNG, pngfnm = pngfnm, pngtitle = pngtitle, 
+  dmat = diffsummary(lsdats, bPNG = bPNG, pngfnm = pngfnm, pngtitle = pngtitle, 
               rcnames = rcnames, bColorBar = bColorBar, datUnits = datUnits, 
               pngWidth = pngWidth, pngHeight = pngHeight, 
               fromRes = fromRes, toRes = toRes, bGrid = bGrid, 
               ospace = ospace, bQuantile = bQuantile, bDiagNA = bDiagNA, 
               diagColor = diagColor, fWidth = fWidth, fHeight = fHeight, 
-              zmean = zmean, zrange = zrange, cutoff = cutoff)
+              zmean = zmean, zrange = zrange, cutoff = cutoff, bReturn = TRUE)
   
-  #return(lsdats)
+  if (avgDiffPNG != "")
+  {
+    dat = dat2minabs(dmat[[3, 1]], dmat[[3, 2]])
+    
+    # Subfunction does the work.
+    dat = dat2png(dat, bPNG = bPNG, pngfnm = avgDiffPNG, 
+                  pngWidth = fWidth, pngHeight = fHeight, bPlot = TRUE,
+                  fromRes = fromRes, toRes = toRes, bGrid = bGrid,  
+                  bColorBar = bColorBar, 
+                  bDiagNA = bDiagNA, diagColor = diagColor, 
+                  zmean = zmean, zrange = zrange, cutoff = cutoff, 
+                  datUnits = datUnits, bQuantile = bQuantile, 
+                  pngtitle = "Mean Difference")
+  }
 }
 
 
@@ -115,6 +129,19 @@ mk_lsfnms = function(includeFiles = c(1, 2, 3, 4, 5), addPattern = "")
     lsfnms[[which(includeFiles == 5)]] = dir(pattern = paste("^M2H\\.", ".*", addPattern, sep = ""))
   }
   return(lsfnms)
+}
+
+
+dat2minabs = function(dat1, dat2)
+{
+  for (i in 1:length(dat1))
+  {
+    if (abs(dat2[i]) < abs(dat1[i]))
+    {
+      dat1[i] = dat2[i]
+    }
+  }
+  return(dat1)
 }
 
 
@@ -167,6 +194,17 @@ invert_ddat_v4 = function(dat)
 }
 
 
+invert_ddat_v5 = function(dat)
+{
+  # Invert by fitting to normal distribution.
+  x   = mean(dat, na.rm = TRUE)
+  xsd = sd(dat, na.rm = TRUE)
+  dat = pnorm(dat, mean = x, sd = xsd, lower.tail = FALSE)
+  
+  return(dat)
+}
+
+
 r2sigma = function(r, rsigma = 1.0)
 {
   s = 2.0 / (1.0 + exp(-r / rsigma)) - 1.0
@@ -191,9 +229,10 @@ diffsummary = function(lsdats, bPNG = TRUE, pngfnm = "diffsummary.png",
                        pngtitle = "", rcnames = NA, bColorBar = FALSE, 
                        fromRes = NA, toRes = NA, bGrid = FALSE, 
                        pngWidth = NA, pngHeight = NA, ospace = 0, 
-                       bQuantile = TRUE, bDiagNA = TRUE, diagColor = 0.5, 
+                       bQuantile = FALSE, bDiagNA = TRUE, diagColor = 0.5, 
                        fWidth = 500, fHeight = 500, zmean = 0.0, zrange = 0.0, 
-                       cutoff = 0.0, datUnits = "")
+                       cutoff = 0.0, datUnits = "", 
+                       bDQuantile = TRUE, bReturn = FALSE)
 {
   ndats = length(lsdats)
   if (bPNG)
@@ -208,23 +247,47 @@ diffsummary = function(lsdats, bPNG = TRUE, pngfnm = "diffsummary.png",
     }
     png(pngfnm, width = pngWidth, height = pngHeight)
   }
-  fmat = matrix(data = 1:(ndats ^ 2), byrow = TRUE, 
+  fmat = matrix(data = 1:(ndats * ndats), byrow = TRUE, 
                 nrow = ndats, ncol = ndats)
   layout(fmat)
   # Space for labeling the main figure.
   par(oma = c(ospace, ospace, ospace, 0))
   
+  # Save the data to a list matrix if required. Creates matrix.
+  if (bReturn)
+  {
+    dmat = as.list(numeric(ndats * ndats))
+    dim(dmat) = c(ndats, ndats)
+  }
+  
   # Loops through all files and plots them.
   for (i in 1:ndats)
   {
     idat = lsdats[[i]]
+    
+    if (bDQuantile)
+    {
+      idat = quantilize(idat)
+    }
+    
     for (j in 1:ndats)
     {
       jdat = lsdats[[j]]
-      jdat = diff2png(idat, jdat, datUnits = datUnits, bQuantile = bQuantile, 
+      
+      if (bDQuantile)
+      {
+        jdat = quantilize(jdat)
+      }
+      
+      ddat = diff2png(idat, jdat, datUnits = datUnits, bQuantile = bQuantile, 
                       bDiagNA = bDiagNA, diagColor = diagColor, 
                       zmean = zmean, zrange = zrange, cutoff = cutoff, 
                       fromRes = fromRes, toRes = toRes, bGrid = bGrid)
+      # Save a copy of difference to the output matrix.
+      if (bReturn)
+      {
+        dmat[[i, j]] = ddat
+      }
     }
   }
   
@@ -244,9 +307,16 @@ diffsummary = function(lsdats, bPNG = TRUE, pngfnm = "diffsummary.png",
   mtext(rev(rcnames), outer = TRUE, side = 2, cex = 2.0, at = rcnpos, 
         line = ospace %/% 2)
   
+  # Close image.
   if (bPNG)
   {
     dev.off()
+  }
+  
+  # Return matrix.
+  if (bReturn)
+  {
+    return(dmat)
   }
 }
 
@@ -288,11 +358,18 @@ dfnm2png = function(fnm1, fnm2, bPNG = FALSE, pngfnm = "diffcorr.png",
                     bColorBar = FALSE, bHist = FALSE, bQHist = FALSE, 
                     bDiagNA = TRUE, diagColor = 0.5, bQuantile = TRUE, 
                     zmean = 0.0, zrange = 0.0, cutoff = 0.0, 
-                    datUnits = "", pngtitle = "")
+                    datUnits = "", pngtitle = "", bDQuantile = TRUE)
 {
   # Load files.
   dat1 = as.matrix(read.table(fnm1))
   dat2 = as.matrix(read.table(fnm2))
+  
+  # Take difference of quantiles?
+  if (bDQuantile)
+  {
+    dat1 = quantilize(dat1)
+    dat2 = quantilize(dat2)
+  }
   
   dat  = diff2png(dat1, dat2, bPNG = bPNG, pngfnm = pngfnm, 
                   pngWidth = pngWidth, pngHeight = pngHeight, bPlot = bPlot,
@@ -312,15 +389,12 @@ diff2png = function(dat1, dat2, bPNG = FALSE, pngfnm = "diffcorr.png",
                     pngWidth = 1400, pngHeight = 1000, bPlot = TRUE, 
                     fromRes = NA, toRes = NA, bGrid = FALSE, 
                     bColorBar = FALSE, bHist = FALSE, bQHist = FALSE, 
-                    bDiagNA = TRUE, diagColor = 0.5, bQuantile = TRUE, 
+                    bDiagNA = TRUE, diagColor = 0.5, bQuantile = FALSE, 
                     zmean = 0.0, zrange = 0.0, cutoff = 0.0, 
                     datUnits = "", pngtitle = "")
 {
-  # These do nothing unless bDiagNA or bQuantile are TRUE.
-  dat1 = dat2png(dat1, bPlot = FALSE, bDiagNA = bDiagNA, 
-                 bQuantile = bQuantile)
-  dat2 = dat2png(dat2, bPlot = FALSE, bDiagNA = bDiagNA, 
-                 bQuantile = bQuantile)
+  # If dat is intended to be the difference of quantiles, the function 
+  # quantilize(dat) should be used on the inputs.
   dat  = dat1 - dat2
   
   # Subfunction does the work.
@@ -756,8 +830,16 @@ dat2png = function(dat, bPNG = FALSE, pngfnm = "correl.png", pngtitle = "",
     png(pngfnm, width = pngWidth, height = pngHeight)
     if (bPlot)
     {
-      layout(matrix(c(0, 0, 0, 3, 3, 4, 1, 2, 0), nrow = 3, ncol = 3), 
-             widths = c(1, 10, 5), heights = c(7, 7, 2))
+      if (bHist)
+      {
+        layout(matrix(c(0, 0, 0, 3, 3, 4, 1, 2, 0), nrow = 3, ncol = 3), 
+               widths = c(1, 10, 5), heights = c(7, 7, 2))
+      }
+      else
+      {
+        layout(matrix(c(0, 0, 1, 2), nrow = 2, ncol = 2), 
+               widths = c(1, 10), heights = c(14, 2))
+      }
     }
     else
     {
@@ -795,18 +877,9 @@ dat2png = function(dat, bPNG = FALSE, pngfnm = "correl.png", pngtitle = "",
   # Convert to quantiles.
   if (bQuantile)
   {
-    if (sum(abs(dat), na.rm = TRUE) > 0.0)
-    {
-      # f converts to percentile then qnorm converts to z-score.
-      f   = ecdf(dat)
-      dat = qnorm(f(dat))
-      dim(dat) = c(msize, msize)
-      
-      # Outliers.
-      dat[dat >  5.0] =  5.0
-      dat[dat < -5.0] = -5.0
-    }
+    dat = quantilize(dat)
     
+    # Display histogram after quantilization.
     if (bQHist)
     {
       # Record the data range.
@@ -929,6 +1002,31 @@ dat2png = function(dat, bPNG = FALSE, pngfnm = "correl.png", pngtitle = "",
     dev.off()
   }
   return(ret)
+}
+
+
+quantilize = function(dat)
+{
+  # Store dimensions. 
+  dims = dim(dat)
+  
+  # Do not quantilize the values on the diagonal which are all the same. 
+  diag(dat) = NA
+  
+  # Do nothing to an empty matrix.
+  if (sum(abs(dat), na.rm = TRUE) > 0.0)
+  {
+    # Convert to quantiles.
+    f   = ecdf(dat)
+    dat = qnorm(f(dat))
+    dim(dat) = dims
+    
+    # Outliers.
+    dat[dat >  5.0] =  5.0
+    dat[dat < -5.0] = -5.0
+  }
+  
+  return(dat)
 }
 
 

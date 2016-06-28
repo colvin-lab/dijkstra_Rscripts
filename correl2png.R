@@ -63,16 +63,15 @@ mk_diffsummary2 = function(rlsfnms = mk_lsfnms(includeFiles = c(1, 3, 4),
   for (i in 1:length(rlsfnms))
   {
     rdat = avg2png(rlsfnms[[i]], datUnits = datUnits, bQuantile = FALSE, 
-                   bDiagNA = bDiagNA, diagColor = diagColor, 
+                   bDiagNA = FALSE, diagColor = diagColor, 
                    zmean = 0.0, zrange = zrange, cutoff = cutoff)
     rdat = r2sigma(rdat)
     ddat = avg2png(dlsfnms[[i]], datUnits = datUnits, bQuantile = FALSE, 
-                   bDiagNA = bDiagNA, diagColor = diagColor, 
+                   bDiagNA = FALSE, diagColor = diagColor, 
                    zmean = 0.0, zrange = zrange, cutoff = cutoff)
     #return(ddat)
     ddat = invert_ddat_v4(ddat)
-    idat = rdat * ddat
-    lsdats[[i]] = idat
+    lsdats[[i]] = rdat * ddat
   }
   
   dmat = diffsummary(lsdats, bPNG = bPNG, pngfnm = pngfnm, pngtitle = pngtitle, 
@@ -95,7 +94,7 @@ mk_diffsummary2 = function(rlsfnms = mk_lsfnms(includeFiles = c(1, 3, 4),
                   bDiagNA = bDiagNA, diagColor = diagColor, 
                   zmean = zmean, zrange = zrange, cutoff = cutoff, 
                   datUnits = datUnits, bQuantile = bQuantile, 
-                  pngtitle = "Mean Difference")
+                  pngtitle = "Consistent Magnitude of Difference")
   }
 }
 
@@ -136,9 +135,12 @@ dat2minabs = function(dat1, dat2)
 {
   for (i in 1:length(dat1))
   {
-    if (abs(dat2[i]) < abs(dat1[i]))
+    if (!is.na(abs(dat1[i])) & !is.na(abs(dat2[i])))
     {
-      dat1[i] = dat2[i]
+      if (abs(dat2[i]) < abs(dat1[i]))
+      {
+        dat1[i] = dat2[i]
+      }
     }
   }
   return(dat1)
@@ -693,6 +695,35 @@ datoutlier = function(lsfnms, nrows, ncols, pngfnm = "datoutlier.png",
 }
 
 
+avg2dat = function(fnmlist, bQuantile = FALSE)
+{
+  nFiles = length(fnmlist)
+  d      = dim(as.matrix(read.table(fnmlist[1])))
+  dat    = matrix(data = 0, nrow = d[1], ncol = d[2])
+  
+  for (i in 1:nFiles)
+  {
+    # Load file.
+    fnm  = fnmlist[i]
+    idat = as.matrix(read.table(fnm))
+    
+    if (bQuantile)
+    {
+      idat = quantilize(idat)
+    }
+    
+    # Add to sum.
+    dat  = dat + idat
+  }
+  
+  # Mean of dat.
+  dat = dat / nFiles
+  
+  return(dat)
+}
+
+
+
 # fnmlist: Vector of file names as returned by the dir() function.
 avg2png = function(fnmlist, bPNG = FALSE, pngfnm = "avgcor.png", 
                    pngWidth = 1400, pngHeight = 1000, bPlot = FALSE, 
@@ -702,24 +733,8 @@ avg2png = function(fnmlist, bPNG = FALSE, pngfnm = "avgcor.png",
                    zmean = 0.0, zrange = 0.0, cutoff = 0.0, 
                    datUnits = "", pngtitle = "")
 {
-  nFiles = length(fnmlist)
-  d      = dim(as.matrix(read.table(fnmlist[1])))
-  dat    = matrix(data = 0, nrow = d[1], ncol = d[2])
-  
-  for (i in 1:nFiles)
-  {
-    fnm = fnmlist[i]
-    # This actually doesn't do anything except load the file unless bQuantile 
-    # or bDiagNA are set to TRUE.
-    idat = fnm2png(fnm, bPlot = FALSE, bDiagNA = bDiagNA, 
-                   bQuantile = bQuantile)
-    
-    # Add to sum.
-    dat  = dat + idat
-  }
-  
-  # Mean of dat.
-  dat = dat / nFiles
+  # Take average of files in fnmlist.
+  dat = avg2dat(fnmlist, bQuantile = bQuantile)
   
   # Subfunction does the work.
   dat = dat2png(dat, bPNG = bPNG, pngfnm = pngfnm, pngtitle = pngtitle, 

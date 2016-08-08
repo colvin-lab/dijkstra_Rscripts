@@ -68,6 +68,22 @@ dijkstra_search = function(fnm, fromRes, toRes, nres = 518,
 }
 
 
+calc_score = function(fnm, nres = 518, hlines = 1)
+{
+  for (ires in 1:nres)
+  {
+    dij_data = read_dij(fnm, ires, nres = nres, hlines = hlines)
+    R = dij_data$MEAN_R
+    S = dij_data$PATH_R
+    P = dij_data$TOTAL_R
+  }
+}
+
+
+########################### Sub-functions #############################
+#######################################################################
+
+
 doPlot = function(x, fromRes, toRes, type, leg, ylab)
 {
   plot(x, xlab = "Residue", ylab = ylab, type = type)
@@ -77,49 +93,6 @@ doPlot = function(x, fromRes, toRes, type, leg, ylab)
   axis(3, at =   toRes, labels = NA, lwd = 0, lwd.ticks = 2, las = 2, 
        col.ticks = "red")
   #abline(v =   toRes, col = "red",  lwd = 1)
-}
-
-
-
-outside_paths = function(infile, outfile, nChain = 4, 
-                         nres = c(518, 518, 518, 518))
-{
-  sink(file = outfile)
-  n = sum(nres)
-  for (i in 1:nChain)
-  {
-    iLine = sum(nres[0:(i - 1)]) * n + sum(nres[0:(i - 1)])
-    bRes  = sum(nres[0:(i - 1)])
-    eRes  = sum(nres[0:i])
-    for (j in 1:nres[i])
-    {
-      # jLine is one less than the line that the k loop starts on.
-      jLine = iLine + (j - 1) * n
-      for (k in 1:nres[i])
-      {
-        # kLine is one less than the line being read.
-        kLine = jLine + k
-        kText = scan(infile, what = "character", sep = ":", quiet = TRUE, 
-                     strip.white = TRUE, skip = kLine, nlines = 1)
-        kPath = as.numeric(strsplit(kText[6], " +")[[1]])
-        pLeg  = length(kPath)
-        if (pLeg > 3)
-        {
-          for (m in 3:(pLeg - 1))
-          {
-            mRes = kPath[m]
-            if ((mRes < bRes) | (mRes >= eRes))
-            {
-              sRes = as.numeric(kText[1])
-              tRes = as.numeric(kText[2])
-              cat(sprintf("%6i %6i %6i \n", sRes, tRes, mRes))
-            }
-          }
-        }
-      }
-    }
-  }
-  sink()
 }
 
 
